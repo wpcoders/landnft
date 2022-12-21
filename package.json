@@ -10,6 +10,7 @@
     "dotenv": "^16.0.3"
   },
   "scripts": {
+    "test": "hardhat test",
     "compile": "hardhat compile",
     "flatten": "mkdir flattened || hardhat flatten > flattened/flattened.sol"
   }
