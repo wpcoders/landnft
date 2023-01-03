@@ -1,6 +1,6 @@
 const { loadFixture } = require("@nomicfoundation/hardhat-network-helpers");
 const { expect } = require("chai");
-const { ethers } = require("hardhat");
+const { ethers, upgrades } = require("hardhat");
 
 describe("CraftdefiSLands", async function () {
   async function deployTokenFixture() {
@@ -18,6 +18,8 @@ describe("CraftdefiSLands", async function () {
     const CraftdefiSLandsToken = await CraftdefiSLandsFactory.deploy();
     await CraftdefiSLandsToken.deployed();
 
+    const proxyContract = await upgrades.deployProxy(CraftdefiSLandsFactory);
+
     const lansSaleFactory = await ethers.getContractFactory("LandSale");
     const landSaleToken = await lansSaleFactory.deploy({
       gasLimit: 30000000,
@@ -31,6 +33,7 @@ describe("CraftdefiSLands", async function () {
       landSaleToken,
       SACGramsToken,
       xNorlaNFTToken,
+      proxyContract,
       owner,
       addr1,
       addr2,
@@ -89,57 +92,110 @@ describe("CraftdefiSLands", async function () {
     expect(saleState).to.equal(true);
   });
 
-  it("should set minter role", async function() {
-    const { landSaleToken, CraftdefiSLandsToken } = await loadFixture(
+  it("should set minter role", async function () {
+    const { landSaleToken, proxyContract } = await loadFixture(
       deployTokenFixture
     );
 
-    const nGrantRoleTx = await CraftdefiSLandsToken.grantRole("0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6", landSaleToken.address);
+    const nGrantRoleTx = await proxyContract.grantRole(
+      "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6",
+      landSaleToken.address
+    );
+
     await nGrantRoleTx.wait();
   });
 
-  // it("should only enabled zone can be minted", async function () {
-  //   const { landSaleToken, CraftdefiSLandsToken } = await loadFixture(
-  //     deployTokenFixture
-  //   );
+  it("should only enabled zone can be minted", async function () {
+    const { landSaleToken, proxyContract, addr1 } = await loadFixture(
+      deployTokenFixture
+    );
 
-  //   const newZoneTx = await CraftdefiSLandsToken.newZone("zone one");
-  //   await newZoneTx.wait();
+    const newZoneTx = await proxyContract.newZone("zone one");
+    await newZoneTx.wait();
 
-  //   const setSaleTx = await landSaleToken.setSaleState([1, 2], true);
-  //   await setSaleTx.wait();
+    const setSaleTx = await landSaleToken.setSaleState([1, 2], true);
+    await setSaleTx.wait();
 
-  //   const saleState = await landSaleToken.saleFlag(1);
+    await proxyContract.safeMint(addr1.address, 0, 0, 1);
+  });
 
-  //   console.log("saleState", saleState);
+  it("should set Cool Down Period.", async function () {
+    const { landSaleToken } = await loadFixture(deployTokenFixture);
 
-  //   await landSaleToken.mintLand(0, 0, 2);
-  // });
+    await landSaleToken.setCooldownPeriod(1200);
 
-  // it("should set whitelist sale state", async function () {
-  //   const { landSaleToken } = await loadFixture(deployTokenFixture);
-  //   const setWhitelistTx = await landSaleToken.setWhitelistSaleState(
-  //     [1, 2],
-  //     true
-  //   );
+    const cooldownPeriod = (await landSaleToken.cooldownPeriod()).toNumber();
 
-  //   await setWhitelistTx.wait();
+    expect(cooldownPeriod).to.equal(1200);
+  });
 
-  //   const isLandWhitelisted = await landSaleToken.whitelistSaleFlag(2);
+  it("should not mint another NFT within Cool Down Period.", async function () {
+    const { landSaleToken, proxyContract, addr1 } = await loadFixture(
+      deployTokenFixture
+    );
 
-  //   expect(isLandWhitelisted).to.equal(true);
-  // });
+    const newZoneTx = await proxyContract.newZone("zone one");
+    await newZoneTx.wait();
 
-  // it("should only enabled zone can be whitelist minted", async function() {
-  //   const { landSaleToken } = await loadFixture(deployTokenFixture);
+    const setSaleTx = await landSaleToken.setSaleState([1], true);
+    await setSaleTx.wait();
 
-  //   const setWhitelistTx = await landSaleToken.setWhitelistSaleState([1], true);
-  //   await setWhitelistTx.wait();
+    await landSaleToken.setCooldownPeriod(1200);
 
-  //   const isLandWhitelisted = await landSaleToken.whitelistSaleFlag(1);
+    await proxyContract.safeMint(addr1.address, 0, 1, 1);
 
-  //   console.log("isLandWhitelisted", isLandWhitelisted);
+    await proxyContract.safeMint(addr1.address, 0, 2, 1);
+  });
 
-  //   await landSaleToken.whitelistMintLand(0, 0, 1);
-  // });
+  it("should set whitelist sale state", async function () {
+    const { landSaleToken } = await loadFixture(deployTokenFixture);
+    const setWhitelistTx = await landSaleToken.setWhitelistSaleState(
+      [1, 2],
+      true
+    );
+
+    await setWhitelistTx.wait();
+
+    const isLandWhitelisted = await landSaleToken.whitelistSaleFlag(2);
+
+    expect(isLandWhitelisted).to.equal(true);
+  });
+
+  it("should only enabled zone can be whitelist minted", async function () {
+    const { landSaleToken, proxyContract } = await loadFixture(
+      deployTokenFixture
+    );
+
+    const newZoneTx = await proxyContract.newZone("zone two");
+    await newZoneTx.wait();
+
+    const setWhitelistTx = await landSaleToken.setWhitelistSaleState(
+      [1, 2],
+      true
+    );
+    await setWhitelistTx.wait();
+
+    await landSaleToken.whitelistMintLand(1, 0, 0, 1);
+  });
+
+  it("should set approve tokens", async function () {
+    const { landSaleToken, SACGramsToken, owner } = await loadFixture(
+      deployTokenFixture
+    );
+
+    await SACGramsToken.approve(
+      landSaleToken.address,
+      ethers.utils.parseEther("500")
+    );
+
+    const allowance = Number(
+      ethers.utils
+        .formatEther(
+          await SACGramsToken.allowance(owner.address, landSaleToken.address)
+        )
+        .toString()
+    );
+
+    expect(allowance).to.equal(500);
+  });
 });

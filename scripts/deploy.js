@@ -23,6 +23,14 @@ async function main() {
   console.log(`CraftdefiSLands deployed at ${DeployedCraftdefiSLands.address}`);
 
   console.log('LandSale deploying');
+
+  const DeployedAdminUpgradeabilityProxy = await AdminUpgradeabilityProxy.deploy(DeployedCraftdefiSLands.address, owner.address, []);
+  await DeployedAdminUpgradeabilityProxy.deploy();
+
+  console.log(`AdminUpgradeabilityProxy deployed at ${DeployedAdminUpgradeabilityProxy.address}`);
+
+
+  console.log('LandSale deploying');
   const DeployedLandSale = await LandSale.deploy();
 
   await DeployedLandSale.deployed();

@@ -1,5 +1,6 @@
 require("@nomicfoundation/hardhat-toolbox");
-require('dotenv').config();
+require("@openzeppelin/hardhat-upgrades");
+require("dotenv").config();
 
 const networks = {
   testnet: {
