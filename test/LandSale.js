@@ -6,14 +6,13 @@ describe("CraftdefiSLands", async function () {
   async function deployTokenFixture() {
     const [owner, addr1, addr2, addr3, addr4] = await ethers.getSigners();
 
-    const SACFactory = await ethers.getContractFactory("SAC");
-    const SACToken = await SACFactory.deploy();
-
-    const SACGramsFactory = await ethers.getContractFactory("SACGrams");
-    const SACGramsToken = await SACGramsFactory.deploy();
+    const BUSDFactory = await ethers.getContractFactory("BEP20Token");
+    const BUSDToken = await BUSDFactory.deploy();
 
     const xNorlaNFTFactory = await ethers.getContractFactory("xNorlaNFT");
     const xNorlaNFTToken = await xNorlaNFTFactory.deploy();
+
+    const xNorlaNFTProxy = await upgrades.deployProxy(xNorlaNFTFactory);
 
     const CraftdefiSLandsFactory = await ethers.getContractFactory(
       "contracts/CraftdefiSLands.sol:CraftdefiSLands"
@@ -31,26 +30,15 @@ describe("CraftdefiSLands", async function () {
     await landSaleToken.deployed();
 
     await landSaleToken.setLandContract(proxyContract.address);
-    await landSaleToken.setWhitelistContract(SACToken.address);
-
-    const setAddrs = await SACGramsToken.setWalletAddresses(
-      owner.address,
-      addr1.address,
-      addr2.address,
-      addr3.address
-    );
-    await setAddrs.wait();
-
-    const setBalToAddrTx = await SACGramsToken.mint();
-    await setBalToAddrTx.wait();
+    await landSaleToken.setWhitelistContract(xNorlaNFTProxy.address);
 
     return {
       CraftdefiSLandsToken,
       landSaleToken,
-      SACGramsToken,
       xNorlaNFTToken,
       proxyContract,
-      SACToken,
+      xNorlaNFTProxy,
+      BUSDToken,
       owner,
       addr1,
       addr2,
@@ -78,27 +66,27 @@ describe("CraftdefiSLands", async function () {
   });
 
   it("should set token contract", async function () {
-    const { landSaleToken, SACGramsToken } = await loadFixture(
+    const { landSaleToken, xNorlaNFTProxy } = await loadFixture(
       deployTokenFixture
     );
 
-    await landSaleToken.setToken(SACGramsToken.address);
+    await landSaleToken.setToken(xNorlaNFTProxy.address);
 
     const tokenAddress = await landSaleToken.token();
 
-    expect(tokenAddress).to.equal(SACGramsToken.address);
+    expect(tokenAddress).to.equal(xNorlaNFTProxy.address);
   });
 
   it("should set whitelist contract", async function () {
-    const { landSaleToken, xNorlaNFTToken } = await loadFixture(
+    const { landSaleToken, xNorlaNFTProxy } = await loadFixture(
       deployTokenFixture
     );
 
-    await landSaleToken.setToken(xNorlaNFTToken.address);
+    await landSaleToken.setToken(xNorlaNFTProxy.address);
 
     const tokenAddress = await landSaleToken.token();
 
-    expect(tokenAddress).to.equal(xNorlaNFTToken.address);
+    expect(tokenAddress).to.equal(xNorlaNFTProxy.address);
   });
 
   it("should set sale state", async function () {
@@ -149,7 +137,7 @@ describe("CraftdefiSLands", async function () {
   });
 
   it("should not mint another NFT within Cool Down Period.", async function () {
-    const { landSaleToken, proxyContract, SACGramsToken, owner } =
+    const { landSaleToken, proxyContract, xNorlaNFTProxy, owner, BUSDToken } =
       await loadFixture(deployTokenFixture);
 
     const nGrantRoleTx = await proxyContract.grantRole(
@@ -158,12 +146,12 @@ describe("CraftdefiSLands", async function () {
     );
     await nGrantRoleTx.wait();
 
-    const sacTx = await landSaleToken.setToken(SACGramsToken.address);
+    const sacTx = await landSaleToken.setToken(BUSDToken.address);
     await sacTx.wait();
 
-    const allowanceTx = await SACGramsToken.approve(
+    const allowanceTx = await BUSDToken.approve(
       landSaleToken.address,
-      "1000000000000000000"
+      "100000000000000000000"
     );
     await allowanceTx.wait();
 
@@ -205,7 +193,7 @@ describe("CraftdefiSLands", async function () {
   });
 
   it("should only enabled zone can be whitelist minted", async function () {
-    const { landSaleToken, proxyContract, SACToken, owner, SACGramsToken } =
+    const { landSaleToken, proxyContract, BUSDToken, owner, xNorlaNFTProxy } =
       await loadFixture(deployTokenFixture);
 
     const nGrantRoleTx = await proxyContract.grantRole(
@@ -214,10 +202,10 @@ describe("CraftdefiSLands", async function () {
     );
     await nGrantRoleTx.wait();
 
-    const sacTx = await landSaleToken.setToken(SACGramsToken.address);
+    const sacTx = await landSaleToken.setToken(BUSDToken.address);
     await sacTx.wait();
 
-    const allowanceTx = await SACGramsToken.approve(
+    const allowanceTx = await BUSDToken.approve(
       landSaleToken.address,
       "1000000000000000000"
     );
@@ -235,13 +223,7 @@ describe("CraftdefiSLands", async function () {
     );
     await setWhitelistTx.wait();
 
-    const flipSaleTx = await SACToken.flipPublicSaleState();
-    await flipSaleTx.wait();
-
-    const mintTx = await SACToken.mintSAC(1, {
-      from: owner.address,
-      value: 100000000000000,
-    });
+    const mintTx = await xNorlaNFTProxy.safeMint(owner.address, 3);
     await mintTx.wait();
 
     const finalMintTx = await landSaleToken.whitelistMintLand(1, 0, 0, 1, {
@@ -255,11 +237,11 @@ describe("CraftdefiSLands", async function () {
   });
 
   it("should set approve tokens", async function () {
-    const { landSaleToken, SACGramsToken, owner } = await loadFixture(
+    const { landSaleToken, BUSDToken, owner } = await loadFixture(
       deployTokenFixture
     );
 
-    await SACGramsToken.approve(
+    await BUSDToken.approve(
       landSaleToken.address,
       ethers.utils.parseEther("500")
     );
@@ -267,7 +249,7 @@ describe("CraftdefiSLands", async function () {
     const allowance = Number(
       ethers.utils
         .formatEther(
-          await SACGramsToken.allowance(owner.address, landSaleToken.address)
+          await BUSDToken.allowance(owner.address, landSaleToken.address)
         )
         .toString()
     );
@@ -276,7 +258,7 @@ describe("CraftdefiSLands", async function () {
   });
 
   it("should ignore cooldown period for whitelist mint", async function () {
-    const { landSaleToken, proxyContract, SACToken, owner, SACGramsToken } =
+    const { landSaleToken, proxyContract, BUSDToken, owner, xNorlaNFTProxy } =
       await loadFixture(deployTokenFixture);
 
     const setCoolTx = await landSaleToken.setCooldownPeriod(1200);
@@ -288,10 +270,10 @@ describe("CraftdefiSLands", async function () {
     );
     await nGrantRoleTx.wait();
 
-    const sacTx = await landSaleToken.setToken(SACGramsToken.address);
+    const sacTx = await landSaleToken.setToken(BUSDToken.address);
     await sacTx.wait();
 
-    const allowanceTx = await SACGramsToken.approve(
+    const allowanceTx = await BUSDToken.approve(
       landSaleToken.address,
       "1000000000000000000"
     );
@@ -309,13 +291,7 @@ describe("CraftdefiSLands", async function () {
     );
     await setWhitelistTx.wait();
 
-    const flipSaleTx = await SACToken.flipPublicSaleState();
-    await flipSaleTx.wait();
-
-    const mintTx = await SACToken.mintSAC(2, {
-      from: owner.address,
-      value: 200000000000000,
-    });
+    const mintTx = await xNorlaNFTProxy.safeMint(owner.address, 3);
     await mintTx.wait();
 
     const firstMintTx = await landSaleToken.whitelistMintLand(1, 0, 0, 1, {
